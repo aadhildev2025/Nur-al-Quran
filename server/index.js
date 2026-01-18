@@ -34,14 +34,17 @@ if (!process.env.MONGODB_URI) {
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/qurandb')
     .then(() => {
         console.log('✅ Connected to MongoDB');
-        app.listen(PORT, () => {
-            console.log(`🚀 Server running on port ${PORT}`);
-        });
     })
     .catch((err) => {
         console.error('❌ MongoDB Connection Error:', err.message);
-        // If DB connection fails, we still start the server for other routes (optional)
-        app.listen(PORT, () => {
-            console.log(`🚀 Server running on port ${PORT} (without MongoDB)`);
-        });
     });
+
+// Conditionally start server (only locally)
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+    });
+}
+
+// Export the app for Vercel
+module.exports = app;
