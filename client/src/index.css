@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme {
+  --color-spiritual-50: #f0fdf4;
+  --color-spiritual-100: #dcfce7;
+  --color-spiritual-200: #bbf7d0;
+  --color-spiritual-300: #86efac;
+  --color-spiritual-400: #4ade80;
+  --color-spiritual-500: #22c55e;
+  --color-spiritual-600: #16a34a;
+  --color-spiritual-700: #15803d;
+  --color-spiritual-800: #166534;
+  --color-spiritual-900: #14532d;
+  --color-spiritual-950: #052e16;
+
+  --color-accent-gold: #D4AF37;
+  --color-accent-emerald: #047857;
+
+  --font-sans: "Inter", "sans-serif";
+  --font-arabic: "Amiri", "serif";
+}
+
+@layer base {
+  body {
+    @apply bg-spiritual-50 text-spiritual-900 font-sans;
+  }
+}
+
+.spiritual-gradient {
+  background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);
+}
+
+.glass-card {
+  @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+}
+
+.arabic-text {
+  @apply font-arabic text-right;
+}
