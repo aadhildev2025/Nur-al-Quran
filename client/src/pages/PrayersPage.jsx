@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, MapPin, Navigation, Moon, Sun, X, Globe, Search, ChevronDown } from 'lucide-react';
+import { Clock, Moon, Sun, X, Globe, ChevronDown } from 'lucide-react';
 
 const PrayersPage = () => {
     const [times, setTimes] = useState(null);
@@ -8,7 +8,6 @@ const PrayersPage = () => {
     const [country, setCountry] = useState('Sri Lanka');
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [tempCity, setTempCity] = useState('Puttalam');
     const [tempCountry, setTempCountry] = useState('Sri Lanka');
     const [countries, setCountries] = useState([]);
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -21,7 +20,7 @@ const PrayersPage = () => {
     const fetchTimes = async (cityName, countryName) => {
         setLoading(true);
         try {
-            const res = await fetch(`https://api.aladhan.com/v1/timingsByCity?city=${encodeURIComponent(cityName)}&country=${encodeURIComponent(countryName)}&method=2`);
+            const res = await fetch(`https://api.aladhan.com/v1/timingsByCity?city=${encodeURIComponent(cityName)}&country=${encodeURIComponent(countryName)}&method=3`);
             const data = await res.json();
             if (data.data) {
                 setTimes(data.data.timings);
@@ -35,27 +34,42 @@ const PrayersPage = () => {
 
     const fetchCountries = async () => {
         try {
-            const res = await fetch('https://restcountries.com/v3.1/all?fields=name');
+            const res = await fetch('https://restcountries.com/v3.1/all?fields=name,capital');
             const data = await res.json();
             const sortedCountries = data
-                .map(c => c.name.common)
-                .sort((a, b) => a.localeCompare(b));
+                .map(c => ({
+                    name: c.name.common,
+                    capital: c.capital?.[0] || c.name.common
+                }))
+                .sort((a, b) => a.name.localeCompare(b.name));
             setCountries(sortedCountries);
         } catch (err) {
             console.error("Failed to fetch countries", err);
-            setCountries(["Sri Lanka", "India", "Pakistan", "United Kingdom", "United States", "Saudi Arabia", "UAE"]);
+            setCountries([
+                { name: "Sri Lanka", capital: "Colombo" },
+                { name: "Saudi Arabia", capital: "Riyadh" },
+                { name: "UAE", capital: "Abu Dhabi" }
+            ]);
         }
     };
 
     useEffect(() => {
-        fetchTimes(city, country);
+        const selectedCountryObj = countries.find(c => c.name === country);
+        const cityToFetch = selectedCountryObj?.capital || city;
+        fetchTimes(cityToFetch, country);
+    }, [country, countries]);
+
+    useEffect(() => {
         fetchCountries();
-    }, [city, country]);
+    }, []);
 
     const handleLocationSubmit = (e) => {
         e.preventDefault();
-        setCity(tempCity);
-        setCountry(tempCountry);
+        const selectedCountryObj = countries.find(c => c.name === tempCountry);
+        if (selectedCountryObj) {
+            setCity(selectedCountryObj.capital);
+            setCountry(tempCountry);
+        }
         setIsModalOpen(false);
     };
 
@@ -78,9 +92,9 @@ const PrayersPage = () => {
                             onClick={() => setIsModalOpen(true)}
                             className="flex items-center gap-2 text-spiritual-600 bg-white px-5 py-2.5 rounded-2xl border border-spiritual-100 shadow-sm hover:shadow-md hover:border-spiritual-200 transition-all group"
                         >
-                            <MapPin size={18} className="text-accent-emerald group-hover:scale-110 transition-transform" />
-                            <span className="font-semibold text-spiritual-800">{city}, {country}</span>
-                            <span className="ml-2 px-2 py-0.5 bg-spiritual-50 text-accent-emerald text-[10px] font-bold uppercase tracking-wider rounded-lg">Change</span>
+                            <Globe size={18} className="text-accent-emerald group-hover:scale-110 transition-transform" />
+                            <span className="font-semibold text-spiritual-800">{country}</span>
+                            <span className="ml-2 px-2 py-0.5 bg-spiritual-50 text-accent-emerald text-[10px] font-bold uppercase tracking-wider rounded-lg">Select Country</span>
                         </button>
                     </motion.div>
 
@@ -142,20 +156,6 @@ const PrayersPage = () => {
                             ))}
                     </div>
                 )}
-
-                <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-12 p-10 rounded-[48px] bg-accent-gold/5 border border-accent-gold/10 text-center relative overflow-hidden"
-                >
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-accent-gold/10 rounded-full blur-3xl -z-10" />
-                    <Navigation className="mx-auto mb-4 text-accent-gold" size={40} />
-                    <h4 className="text-2xl font-bold text-spiritual-900 mb-2">Qibla Direction</h4>
-                    <p className="text-spiritual-600 mb-8 font-light text-lg">Your Qibla direction from <span className="font-bold text-spiritual-900">{city}</span> is approximately 119° SE.</p>
-                    <button className="bg-accent-gold text-white px-10 py-4 rounded-2xl font-bold shadow-[0_10px_30px_rgba(234,179,8,0.3)] hover:bg-yellow-600 transition-all hover:scale-105">
-                        Open Qibla Finder
-                    </button>
-                </motion.div>
             </div>
 
             {/* Location Selection Modal */}
@@ -183,28 +183,14 @@ const PrayersPage = () => {
                                     <X size={20} />
                                 </button>
                                 <Globe className="mb-4 opacity-80" size={32} />
-                                <h2 className="text-2xl font-bold mb-2">Change Location</h2>
-                                <p className="text-white/70 text-sm font-light">Get accurate prayer times for any city worldwide.</p>
+                                <h2 className="text-2xl font-bold mb-2">Change Country</h2>
+                                <p className="text-white/70 text-sm font-light">Select a country to see accurate prayer times for its capital city.</p>
                             </div>
 
                             <form onSubmit={handleLocationSubmit} className="p-8 space-y-6">
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="text-xs font-bold text-spiritual-400 uppercase tracking-widest ml-1 mb-2 block">City Name</label>
-                                        <div className="relative">
-                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-spiritual-300" size={18} />
-                                            <input
-                                                type="text"
-                                                required
-                                                placeholder="e.g. Colombo, London, Dubai"
-                                                value={tempCity}
-                                                onChange={(e) => setTempCity(e.target.value)}
-                                                className="w-full pl-12 pr-4 py-4 bg-spiritual-50 border border-spiritual-100 rounded-2xl focus:ring-2 focus:ring-accent-emerald focus:border-transparent outline-none transition-all font-medium"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-spiritual-400 uppercase tracking-widest ml-1 mb-2 block">Country</label>
+                                        <label className="text-xs font-bold text-spiritual-400 uppercase tracking-widest ml-1 mb-2 block">Select Country</label>
                                         <div className="relative">
                                             <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-spiritual-300 pointer-events-none" size={18} />
                                             <select
@@ -215,7 +201,7 @@ const PrayersPage = () => {
                                             >
                                                 {countries.length > 0 ? (
                                                     countries.map(c => (
-                                                        <option key={c} value={c}>{c}</option>
+                                                        <option key={c.name} value={c.name}>{c.name}</option>
                                                     ))
                                                 ) : (
                                                     <option value="Sri Lanka">Sri Lanka</option>
