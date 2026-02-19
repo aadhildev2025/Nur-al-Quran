@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, ArrowLeft, Play, Pause, Download, Settings, Share2, Languages, Check, Bookmark, BookmarkCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -10,20 +10,37 @@ const SurahDetail = () => {
     const [translation, setTranslation] = useState(null);
     const [transliteration, setTransliteration] = useState(null);
     const [editions, setEditions] = useState([]);
-    const [selectedEdition, setSelectedEdition] = useState('en.asad');
+    const [selectedEdition, setSelectedEdition] = useState('en.sahih');
     const [loading, setLoading] = useState(true);
     const [playing, setPlaying] = useState(false);
     const [shared, setShared] = useState(false);
     const { isAuthenticated, toggleBookmark, isBookmarked } = useAuth();
     const [audio] = useState(new Audio());
+    const [isAutoScrolling, setIsAutoScrolling] = useState(false);
+    const [scrollSpeed, setScrollSpeed] = useState(0.5); // Default to 0.5x
+    const [showBubble, setShowBubble] = useState(false);
+    const [playingAyah, setPlayingAyah] = useState(null);
 
     useEffect(() => {
         const fetchEditions = async () => {
             try {
                 const res = await fetch('https://api.alquran.cloud/v1/edition?format=text&type=translation');
                 const data = await res.json();
-                const sortedEditions = data.data.sort((a, b) => a.language.localeCompare(b.language));
-                setEditions(sortedEditions);
+                if (data.data) {
+                    // Prioritize English, Sinhala, and Tamil
+                    const priorityIdentifiers = ['en.sahih', 'si.naseemismail', 'ta.tamil', 'en.asad'];
+                    const sortedEditions = data.data.sort((a, b) => {
+                        const indexA = priorityIdentifiers.indexOf(a.identifier);
+                        const indexB = priorityIdentifiers.indexOf(b.identifier);
+
+                        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                        if (indexA !== -1) return -1;
+                        if (indexB !== -1) return 1;
+
+                        return a.language.localeCompare(b.language);
+                    });
+                    setEditions(sortedEditions);
+                }
             } catch (err) {
                 console.error("Failed to fetch editions:", err);
             }
@@ -33,7 +50,10 @@ const SurahDetail = () => {
 
     useEffect(() => {
         const fetchSurahData = async () => {
-            setLoading(true);
+            // Only show full loading state if we don't have surah name yet or if ID changed
+            if (!surah || surah.number !== parseInt(id)) {
+                setLoading(true);
+            }
             try {
                 // Fetch Arabic Text
                 const resArabic = await fetch(`https://api.alquran.cloud/v1/surah/${id}`);
@@ -79,9 +99,25 @@ const SurahDetail = () => {
         if (playing) {
             audio.pause();
         } else {
+            setPlayingAyah(null); // Stop individual ayah playback
+            audio.src = `https://cdn.islamic.network/quran/audio-surah/128/ar.alafasy/${id}.mp3`;
             audio.play().catch(e => console.error("Playback failed:", e));
         }
         setPlaying(!playing);
+    };
+
+    const playAyah = (ayahNumber) => {
+        if (playingAyah === ayahNumber) {
+            audio.pause();
+            setPlayingAyah(null);
+        } else {
+            setPlaying(false); // Stop full surah playback
+            audio.pause();
+            audio.src = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${ayahNumber}.mp3`;
+            audio.play()
+                .then(() => setPlayingAyah(ayahNumber))
+                .catch(e => console.error("Ayah playback failed:", e));
+        }
     };
 
     const handleShare = () => {
@@ -90,7 +126,53 @@ const SurahDetail = () => {
         setTimeout(() => setShared(false), 2000);
     };
 
-    audio.onended = () => setPlaying(false);
+    useEffect(() => {
+        let animationFrameId;
+        const scroll = () => {
+            if (isAutoScrolling) {
+                // Use scrollSpeed directly as pixel amount per frame
+                window.scrollBy(0, scrollSpeed);
+
+                // Stop scrolling if we reach the bottom
+                if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight) {
+                    setIsAutoScrolling(false);
+                    return;
+                }
+                animationFrameId = requestAnimationFrame(scroll);
+            }
+        };
+
+        if (isAutoScrolling) {
+            animationFrameId = requestAnimationFrame(scroll);
+        }
+
+        return () => {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+        };
+    }, [isAutoScrolling, scrollSpeed]);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            // Show bubble after scrolling past 500px OR if auto-scrolling is active
+            if (window.scrollY > 500 || isAutoScrolling) {
+                setShowBubble(true);
+            } else {
+                setShowBubble(false);
+            }
+        };
+
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, [isAutoScrolling]);
+
+    useEffect(() => {
+        audio.onended = () => {
+            setPlaying(false);
+            setPlayingAyah(null);
+        };
+    }, [audio]);
 
     if (loading) return (
         <div className="pt-32 flex flex-col items-center justify-center min-h-screen">
@@ -184,14 +266,23 @@ const SurahDetail = () => {
                             initial={{ opacity: 0 }}
                             whileInView={{ opacity: 1 }}
                             viewport={{ once: true }}
-                            className="group"
+                            className={`group ${playingAyah === ayah.number ? 'bg-accent-gold/5 -mx-4 px-4 rounded-3xl' : ''}`}
                         >
                             <div className="flex flex-col gap-8 pb-12 border-b border-spiritual-100">
                                 <div className="flex items-start justify-between gap-6">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-2xl bg-spiritual-50 flex items-center justify-center text-lg font-bold text-spiritual-800 border border-spiritual-100 shadow-sm">
+                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold border shadow-sm transition-all ${playingAyah === ayah.number ? 'bg-accent-gold text-white border-accent-gold' : 'bg-spiritual-50 text-spiritual-800 border-spiritual-100'}`}>
                                             {ayah.numberInSurah}
                                         </div>
+                                        <button
+                                            onClick={() => playAyah(ayah.number)}
+                                            className={`p-3 rounded-2xl transition-all border shadow-sm ${playingAyah === ayah.number
+                                                ? 'bg-accent-gold text-white border-accent-gold shadow-lg'
+                                                : 'bg-white text-spiritual-400 border-spiritual-100 hover:border-accent-gold hover:text-accent-gold'
+                                                }`}
+                                        >
+                                            {playingAyah === ayah.number ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+                                        </button>
                                         {isAuthenticated && (
                                             <button
                                                 onClick={() => toggleBookmark(surah.number, ayah.numberInSurah)}
@@ -248,6 +339,52 @@ const SurahDetail = () => {
                     )}
                 </div>
             </div>
+
+            {/* Dual Floating Controls Bubble */}
+            <AnimatePresence>
+                {showBubble && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.5, x: -100 }}
+                        animate={{ opacity: 1, scale: 1, x: 0 }}
+                        exit={{ opacity: 0, scale: 0.5, x: -100 }}
+                        className="fixed bottom-8 left-8 z-[60] flex flex-col gap-4"
+                    >
+                        {/* Audio Button */}
+                        <div className="flex items-center gap-3 group">
+                            <button
+                                type="button"
+                                onClick={togglePlayback}
+                                className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all border-4 ${playing
+                                    ? 'bg-accent-gold text-white border-white scale-110 shadow-accent-gold/40'
+                                    : 'bg-spiritual-800 text-white border-white/50 hover:bg-spiritual-900 shadow-spiritual-900/40'
+                                    }`}
+                            >
+                                {playing ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
+                            </button>
+                            <span className="bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg text-xs font-bold text-spiritual-900 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-spiritual-100">
+                                {playing ? 'Pause Recitation' : 'Play Recitation'}
+                            </span>
+                        </div>
+
+                        {/* Scroll Button */}
+                        <div className="flex items-center gap-3 group">
+                            <button
+                                type="button"
+                                onClick={() => setIsAutoScrolling(!isAutoScrolling)}
+                                className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all border-4 ${isAutoScrolling
+                                    ? 'bg-accent-emerald text-white border-white scale-110 shadow-accent-emerald/40'
+                                    : 'bg-spiritual-800 text-white border-white/50 hover:bg-spiritual-900 shadow-spiritual-900/40'
+                                    }`}
+                            >
+                                {isAutoScrolling ? <Pause size={24} fill="currentColor" /> : <BookOpen size={24} fill="currentColor" />}
+                            </button>
+                            <span className="bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg text-xs font-bold text-spiritual-900 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-spiritual-100">
+                                {isAutoScrolling ? 'Pause Auto Scroll' : 'Start Auto Scroll'}
+                            </span>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
